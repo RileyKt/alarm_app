@@ -49,13 +49,40 @@ class AlarmScreenState extends State<AlarmScreen> {
       });
     }
   }
+
+
   Future<void> setAlarm() async {
-    if (_selectedTime != null) {
-      final now = DateTime.now();
-      final alarmTime = DateTime(now.year, now.month, now.day, _selectedTime!.hour, _selectedTime!.minute);
-      await AndroidAlarmManager.oneShotAt(alarmTime, 0, alarmCallback,
-          wakeup: true);
+    if (_selectedTime == null) {
+      print("No time selected.");
+      return;
     }
+
+    final now = DateTime.now();
+    // Convert _selectedTime to a DateTime object for today.
+    final alarmDateTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+
+    // If the selected time is in the past, schedule it for the next day.
+    final scheduleAlarmDateTime = alarmDateTime.isBefore(now)
+        ? alarmDateTime.add(Duration(days: 1))
+        : alarmDateTime;
+
+    // Unique alarm ID.
+    const int alarmId = 2;
+    await AndroidAlarmManager.oneShotAt(
+      scheduleAlarmDateTime,
+      alarmId,
+      alarmCallback,
+      wakeup: true,
+    );
+
+    print("Alarm set for $scheduleAlarmDateTime");
+
   }
 
   static void alarmCallback() {
