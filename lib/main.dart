@@ -1,31 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 
-// Main entry point of the application.
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AndroidAlarmManager.initialize();
   runApp(const MyApp());
 }
 
-// Main application widget.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // MaterialApp sets the configuration for the top-level routing and styling.
     return MaterialApp(
-      title: 'Alarm App',  // The title of the app displayed in the task manager.
+      title: 'Alarm App',
       theme: ThemeData(
-        primarySwatch: Colors.blue,  // Primary theme color of the app.
+        primarySwatch: Colors.blue,
       ),
-      home: const AlarmScreen(),  // Home screen of the app.
+      home: const AlarmScreen(),
     );
   }
 }
 
-// Stateful widget for the alarm screen, manages the alarm setting UI.
 class AlarmScreen extends StatefulWidget {
   const AlarmScreen({super.key});
 
@@ -33,96 +29,98 @@ class AlarmScreen extends StatefulWidget {
   AlarmScreenState createState() => AlarmScreenState();
 }
 
-// State class for the AlarmScreen.
-class AlarmScreenState extends State<AlarmScreen> {
-  TimeOfDay? _selectedTime;  // Holds the selected time for the alarm.
+class AlarmInfo {
+  TimeOfDay time;
+  int id;
 
-  // Function to open a time picker dialog and allow user to select a time.
+  AlarmInfo({required this.time, required this.id});
+}
+
+class AlarmScreenState extends State<AlarmScreen> {
+  List<AlarmInfo> alarms = [];
+
+  int generateAlarmId() {
+    int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
+    // Use the current timestamp modulo a large prime number (for example) to get a unique ID that fits in 31 bits.
+    return currentTimestamp % 1000000007;
+  }
+
   void _pickTime() async {
     final TimeOfDay? time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),  // Set initial time in picker to now.
+      initialTime: TimeOfDay.now(),
     );
-    if (time != null && time != _selectedTime) {
+    if (time != null) {
+      final int id = generateAlarmId();
+      final alarmInfo = AlarmInfo(time: time, id: id);
       setState(() {
-        _selectedTime = time;  // Update the selected time when new time is picked.
+        alarms.add(alarmInfo);
       });
+      await setAlarm(alarmInfo); // Schedule the alarm after adding it to the list
     }
   }
 
 
-  Future<void> setAlarm() async {
-    if (_selectedTime == null) {
-      print("No time selected.");
-      return;
-    }
-
+  Future<void> setAlarm(AlarmInfo alarmInfo) async {
     final now = DateTime.now();
-    // Convert _selectedTime to a DateTime object for today.
     final alarmDateTime = DateTime(
       now.year,
       now.month,
       now.day,
-      _selectedTime!.hour,
-      _selectedTime!.minute,
+      alarmInfo.time.hour,
+      alarmInfo.time.minute,
     );
 
-    // If the selected time is in the past, schedule it for the next day.
     final scheduleAlarmDateTime = alarmDateTime.isBefore(now)
-        ? alarmDateTime.add(Duration(days: 1))
+        ? alarmDateTime.add(const Duration(days: 1))
         : alarmDateTime;
 
-    // Unique alarm ID.
-    const int alarmId = 2;
     await AndroidAlarmManager.oneShotAt(
       scheduleAlarmDateTime,
-      alarmId,
+      alarmInfo.id,
       alarmCallback,
       wakeup: true,
     );
 
-    print("Alarm set for $scheduleAlarmDateTime");
-
+    print("Alarm ${alarmInfo.id} set for $scheduleAlarmDateTime");
   }
 
-  static void alarmCallback() {
-    print("Alarm Fired!");
-// Here you can add the logic to show notifications or any other functionality.
+  void cancelAlarm(int id) async {
+    await AndroidAlarmManager.cancel(id);
+    setState(() {
+      alarms.removeWhere((alarm) => alarm.id == id);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Builds the user interface for the alarm screen.
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Set Alarm'),  // AppBar with title.
+        title: const Text('Set Alarms'),
       ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            ElevatedButton(
-              onPressed: _pickTime,  // Button to trigger time picker.
-              child: const Text('Pick Alarm Time'),
+      body: ListView.builder(
+        itemCount: alarms.length,
+        itemBuilder: (context, index) {
+          final alarm = alarms[index];
+          return ListTile(
+            title: Text('Alarm set for: ${alarm.time.format(context)}'),
+            trailing: IconButton(
+              icon: const Icon(Icons.delete),
+              onPressed: () => cancelAlarm(alarm.id),
             ),
-            ElevatedButton(
-              onPressed: () {
-                setAlarm();
-                final snackBar = SnackBar(
-                  content: Text('Alarm set for ${_selectedTime!.format(context)}'),
-                );
-                ScaffoldMessenger.of(context).showSnackBar(snackBar);
-              },
-              child: const Text('Set Alarm'),
-            ),
-            const SizedBox(height: 20),  // Spacing between button and text.
-            Text(
-              _selectedTime != null ? 'Alarm Time: ${_selectedTime!.format(context)}' : 'No Alarm Set',
-              style: const TextStyle(fontSize: 24),  // Text style for the alarm time.
-            ),
-          ],
-        ),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _pickTime,
+        child: const Icon(Icons.add),
       ),
     );
   }
+}
+
+@pragma('vm:entry-point')
+void alarmCallback() {
+  print("Alarm Fired!");
+  // Here you can add the logic to show notifications or any other functionality.
 }
