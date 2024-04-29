@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
+import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -7,8 +9,36 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  MyAppState createState() => MyAppState();
+}
+
+class MyAppState extends State<MyApp> {
+  static const platform = MethodChannel('com.example.alarm_app/settings');
+  bool _permissionGranted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    checkPermission();
+  }
+
+  Future<void> checkPermission() async {
+    try {
+      final granted = await platform.invokeMethod('checkExactAlarmPermission');
+      setState(() {
+        _permissionGranted = granted;
+      });
+    } catch (e) {
+      print('Failed to check exact alarm permission: $e');
+      setState(() {
+        _permissionGranted = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +47,46 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const AlarmScreen(),
+      home: _permissionGranted ? const AlarmScreen() : const PermissionRequestScreen(),
+    );
+  }
+}
+
+class PermissionRequestScreen extends StatelessWidget {
+  const PermissionRequestScreen({super.key});
+
+  static const platform = MethodChannel('com.example.alarm_app/settings');
+
+  Future<void> openAppSettings() async {
+    try {
+      await platform.invokeMethod('openSettingsForExactAlarm');
+    } catch (e) {
+      print("Failed to open settings: '$e'.");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Permission Needed"),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const Text(
+              'This app requires permission to schedule exact alarms to function properly.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: openAppSettings,
+              child: const Text('Open Settings'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -41,7 +110,6 @@ class AlarmScreenState extends State<AlarmScreen> {
 
   int generateAlarmId() {
     int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
-    // Use the current timestamp modulo a large prime number (for example) to get a unique ID that fits in 31 bits.
     return currentTimestamp % 1000000007;
   }
 
@@ -56,10 +124,9 @@ class AlarmScreenState extends State<AlarmScreen> {
       setState(() {
         alarms.add(alarmInfo);
       });
-      await setAlarm(alarmInfo); // Schedule the alarm after adding it to the list
+      await setAlarm(alarmInfo);
     }
   }
-
 
   Future<void> setAlarm(AlarmInfo alarmInfo) async {
     final now = DateTime.now();
@@ -80,6 +147,7 @@ class AlarmScreenState extends State<AlarmScreen> {
       alarmInfo.id,
       alarmCallback,
       wakeup: true,
+      exact: true,
     );
 
     print("Alarm ${alarmInfo.id} set for $scheduleAlarmDateTime");
