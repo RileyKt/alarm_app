@@ -3,22 +3,52 @@ import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+/*
+Alarm App
+By: Riley Kneen-Teed
+ */
+
+
+
+// Global initialization of the local notifications plugin.
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+// Global navigation key to enable navigation from outside the widget tree, like handling notification taps.
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
+  // Ensures that plugin services are initialized before the app starts.
   WidgetsFlutterBinding.ensureInitialized();
+  // Initializes the Android alarm manager plugin.
   await AndroidAlarmManager.initialize();
   runApp(const MyApp());
+  // Initialize notification settings.
   initializeNotifications();
 }
 
+// Configures notification settings and handles notification taps.
 Future<void> initializeNotifications() async {
   const AndroidInitializationSettings initializationSettingsAndroid =
-  AndroidInitializationSettings('@mipmap/ic_launcher');
+  AndroidInitializationSettings('@mipmap/ic_launcher'); // Icon used for notifications on Android.
+
   const InitializationSettings initializationSettings = InitializationSettings(
     android: initializationSettingsAndroid,
   );
-  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
+
+  await flutterLocalNotificationsPlugin.initialize(
+    initializationSettings,
+    onDidReceiveNotificationResponse: handleNotificationResponse, // Handles actions when notifications are tapped.
+  );
+}
+
+// Handles actions when a notification is tapped.
+void handleNotificationResponse(NotificationResponse response) {
+  if (response.payload != null && navigatorKey.currentState != null) {
+    final timeParts = response.payload!.split(':');
+    final timeOfDay = TimeOfDay(hour: int.parse(timeParts[0]), minute: int.parse(timeParts[1]));
+    navigatorKey.currentState!.push(MaterialPageRoute(
+      builder: (_) => AlarmRingingScreen(time: timeOfDay), // Navigates to the alarm ringing screen.
+    ));
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -35,9 +65,10 @@ class MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    checkPermission();
+    checkPermission(); // Checks if the app has permission to schedule exact alarms.
   }
 
+  // Checks and updates permission status.
   Future<void> checkPermission() async {
     try {
       final granted = await platform.invokeMethod('checkExactAlarmPermission');
@@ -55,6 +86,7 @@ class MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Alarm App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
@@ -71,6 +103,7 @@ class PermissionRequestScreen extends StatelessWidget {
 
   Future<void> openAppSettings() async {
     try {
+      // Requests to open the settings page for exact alarm permissions.
       await platform.invokeMethod('openSettingsForExactAlarm');
     } catch (e) {
       print("Failed to open settings: '$e'.");
@@ -120,11 +153,13 @@ class AlarmInfo {
 class AlarmScreenState extends State<AlarmScreen> {
   List<AlarmInfo> alarms = [];
 
+  // Generates a unique ID for each alarm based on the current timestamp.
   int generateAlarmId() {
     int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
     return currentTimestamp % 1000000007;
   }
 
+  // Allows the user to pick a time and set an alarm.
   void _pickTime() async {
     final TimeOfDay? time = await showTimePicker(
       context: context,
@@ -140,6 +175,7 @@ class AlarmScreenState extends State<AlarmScreen> {
     }
   }
 
+  // Schedules an alarm using Android Alarm Manager.
   Future<void> setAlarm(AlarmInfo alarmInfo) async {
     final now = DateTime.now();
     final alarmDateTime = DateTime(
@@ -165,6 +201,7 @@ class AlarmScreenState extends State<AlarmScreen> {
     print("Alarm ${alarmInfo.id} set for $scheduleAlarmDateTime");
   }
 
+  // Cancels an alarm.
   void cancelAlarm(int id) async {
     await AndroidAlarmManager.cancel(id);
     setState(() {
@@ -199,24 +236,57 @@ class AlarmScreenState extends State<AlarmScreen> {
   }
 }
 
+class AlarmRingingScreen extends StatelessWidget {
+  final TimeOfDay time;
+
+  const AlarmRingingScreen({super.key, required this.time});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Alarm Ringing"),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Text("The alarm set for ${time.format(context)} is now ringing!", style: const TextStyle(fontSize: 24)),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                // This button will navigate back to the previous screen.
+                Navigator.pop(context);
+              },
+              child: const Text('Turn Off Alarm'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 @pragma('vm:entry-point')
 void alarmCallback() async {
   print("Alarm Fired!");
-  await showNotification(0, "Alarm Fired!", "Your alarm is ringing!");
+  // Triggers a notification when the alarm fires.
+  await showNotification(0, "Alarm Fired!", "Your alarm is ringing!", TimeOfDay.now());
 }
 
-Future<void> showNotification(int id, String title, String body) async {
+Future<void> showNotification(int id, String title, String body, TimeOfDay time) async {
   const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
       'your channel id', 'your channel name',
       channelDescription: 'your channel description',
       importance: Importance.max,
       priority: Priority.high,
       ticker: 'ticker');
+
   const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
   await flutterLocalNotificationsPlugin.show(
       id,
       title,
       body,
       platformChannelSpecifics,
-      payload: 'item x');
+      payload: '${time.hour}:${time.minute}');
 }
