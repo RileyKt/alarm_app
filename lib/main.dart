@@ -1,12 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/services.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AndroidAlarmManager.initialize();
   runApp(const MyApp());
+  initializeNotifications();
+}
+
+Future<void> initializeNotifications() async {
+  const AndroidInitializationSettings initializationSettingsAndroid =
+  AndroidInitializationSettings('@mipmap/ic_launcher');
+  const InitializationSettings initializationSettings = InitializationSettings(
+    android: initializationSettingsAndroid,
+  );
+  await flutterLocalNotificationsPlugin.initialize(initializationSettings);
 }
 
 class MyApp extends StatefulWidget {
@@ -188,7 +200,23 @@ class AlarmScreenState extends State<AlarmScreen> {
 }
 
 @pragma('vm:entry-point')
-void alarmCallback() {
+void alarmCallback() async {
   print("Alarm Fired!");
-  // Here you can add the logic to show notifications or any other functionality.
+  await showNotification(0, "Alarm Fired!", "Your alarm is ringing!");
+}
+
+Future<void> showNotification(int id, String title, String body) async {
+  const AndroidNotificationDetails androidPlatformChannelSpecifics = AndroidNotificationDetails(
+      'your channel id', 'your channel name',
+      channelDescription: 'your channel description',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'ticker');
+  const NotificationDetails platformChannelSpecifics = NotificationDetails(android: androidPlatformChannelSpecifics);
+  await flutterLocalNotificationsPlugin.show(
+      id,
+      title,
+      body,
+      platformChannelSpecifics,
+      payload: 'item x');
 }
