@@ -155,7 +155,9 @@ class AlarmScreenState extends State<AlarmScreen> {
 
   // Generates a unique ID for each alarm based on the current timestamp.
   int generateAlarmId() {
-    int currentTimestamp = DateTime.now().millisecondsSinceEpoch;
+    int currentTimestamp = DateTime
+        .now()
+        .millisecondsSinceEpoch;
     return currentTimestamp % 1000000007;
   }
 
@@ -220,7 +222,13 @@ class AlarmScreenState extends State<AlarmScreen> {
         itemBuilder: (context, index) {
           final alarm = alarms[index];
           return ListTile(
-            title: Text('Alarm set for: ${alarm.time.format(context)}'),
+            title: Text(
+              'Alarm set for: ${alarm.time.format(context)}',
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
             trailing: IconButton(
               icon: const Icon(Icons.delete),
               onPressed: () => cancelAlarm(alarm.id),
